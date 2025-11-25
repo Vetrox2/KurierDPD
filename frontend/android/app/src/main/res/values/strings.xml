@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">KurierDPD</string>
+    <string name="title_activity_main">KurierDPD</string>
+    <string name="package_name">com.vetrox.kurierdpd</string>
+    <string name="custom_url_scheme">com.vetrox.kurierdpd</string>
+</resources>
