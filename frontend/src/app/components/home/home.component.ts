@@ -14,9 +14,8 @@ import {
 import * as L from 'leaflet';
 import 'leaflet-routing-machine';
 import { Geolocation } from '@capacitor/geolocation';
-// TODO - zmiana ikonka mojej lokalizacji na jakis samochodzik, test czy lokalizacja przy ruchu sie aktualizuje
+// test czy lokalizacja przy ruchu sie aktualizuje
 // extract do serwisu, pobieranie trasy z backendu
-// dopasowanie mapy do ekranu
 @Component({
   selector: 'app-home',
   imports: [LeafletModule],
@@ -51,7 +50,10 @@ export class HomeComponent {
   private currentPosition = signal<LatLng | undefined>(undefined);
   private map = signal<Map | undefined>(undefined);
   private markers = computed<Marker[]>(() =>
-    this.mapRoutePointsToMarkers(this.routePoints())
+    this.mapRoutePointsToMarkers(
+      this.destinationPoints(),
+      this.currentPosition()
+    )
   );
   private routeControl?: L.Routing.Control;
   private watchId?: string;
@@ -130,17 +132,36 @@ export class HomeComponent {
     map.setView(this.markers()[0].getLatLng(), this.MAX_ZOOM);
   }
 
-  private mapRoutePointsToMarkers(points: LatLng[]): Marker[] {
-    return points.map((point, index) =>
-      marker(point, {
+  private mapRoutePointsToMarkers(
+    points: LatLng[],
+    currentPosition: LatLng | undefined
+  ): Marker[] {
+    const markers: Marker[] = [];
+
+    if (currentPosition) {
+      const currentPosMarker = marker(currentPosition, {
+        icon: L.divIcon({
+          className: 'current-position-marker',
+          html: '<div style="font-size: 28px; text-align: center;">🚗</div>',
+          iconSize: [42, 42],
+        }),
+      }).bindPopup('My current position');
+      markers.push(currentPosMarker);
+    }
+
+    points.forEach((point, index) => {
+      const destinationMarker = marker(point, {
         icon: icon({
           ...Icon.Default.prototype.options,
           iconUrl: 'assets/marker-icon.png',
           iconRetinaUrl: 'assets/marker-icon-2x.png',
           shadowUrl: 'assets/marker-shadow.png',
         }),
-      }).bindPopup(`Point ${index + 1}`)
-    );
+      }).bindPopup(`Destination ${index + 1}`);
+      markers.push(destinationMarker);
+    });
+
+    return markers;
   }
 
   private updateMarkersOnMap(map: Map, markers: Marker[]): void {
