@@ -1,4 +1,12 @@
-import { Component, computed, effect, signal } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  inject,
+  OnDestroy,
+  OnInit,
+  signal,
+} from '@angular/core';
 import { LeafletModule } from '@bluehalo/ngx-leaflet';
 import {
   Icon,
@@ -14,15 +22,16 @@ import {
 import * as L from 'leaflet';
 import 'leaflet-routing-machine';
 import { Geolocation } from '@capacitor/geolocation';
-// test czy lokalizacja przy ruchu sie aktualizuje
-// extract do serwisu, pobieranie trasy z backendu
+import { RouteService } from '../../services/route.service';
+import { RoutePoint } from '../../models/route.model';
+
 @Component({
   selector: 'app-home',
   imports: [LeafletModule],
   templateUrl: './home.component.html',
   styleUrl: './home.component.scss',
 })
-export class HomeComponent {
+export class HomeComponent implements OnInit, OnDestroy {
   readonly MAX_ZOOM: number = 19;
   readonly MAP_OPTIONS: MapOptions = {
     layers: [
@@ -33,18 +42,14 @@ export class HomeComponent {
     ],
   };
 
-  destinationPoints = signal<LatLng[]>([
-    latLng(52.2297, 21.0122),
-    latLng(52.4064, 16.9252),
-    latLng(51.1079, 17.0385),
-    latLng(50.0647, 19.945),
-  ]);
+  private routeService = inject(RouteService);
 
+  destinationPoints = this.routeService.destinationPoints;
   routePoints = computed<LatLng[]>(() => {
     const currentPos = this.currentPosition();
     return currentPos
-      ? [currentPos, ...this.destinationPoints()]
-      : this.destinationPoints();
+      ? [currentPos, ...this.destinationPoints().map((dp) => dp.point)]
+      : this.destinationPoints().map((dp) => dp.point);
   });
 
   private currentPosition = signal<LatLng | undefined>(undefined);
@@ -57,49 +62,23 @@ export class HomeComponent {
   );
   private routeControl?: L.Routing.Control;
   private watchId?: string;
+  private currentMarkersOnMap: Marker[] = [];
 
   constructor() {
-    this.initializeLocationTracking();
-
     effect(() => {
       const map = this.map();
       if (!map) {
         return;
       }
 
-      const markers = this.markers();
-      this.updateMarkersOnMap(map, markers);
+      this.updateMarkersOnMap(map, this.markers());
       this.updateRoute(map);
     });
   }
 
-  async initializeLocationTracking(): Promise<void> {
-    try {
-      const position = await Geolocation.getCurrentPosition();
-      this.currentPosition.set(
-        latLng(position.coords.latitude, position.coords.longitude)
-      );
-
-      this.watchId = await Geolocation.watchPosition(
-        {
-          maximumAge: 5000,
-        },
-        (position, err) => {
-          if (err) {
-            console.error('Error watching location:', err);
-            return;
-          }
-          if (position) {
-            this.currentPosition.set(
-              latLng(position.coords.latitude, position.coords.longitude)
-            );
-            console.log('Updated position:', this.currentPosition());
-          }
-        }
-      );
-    } catch (error) {
-      console.error('Error initializing location tracking:', error);
-    }
+  ngOnInit(): void {
+    this.routeService.fetchRoutesIfEmpty();
+    this.initializeLocationTracking();
   }
 
   ngOnDestroy(): void {
@@ -132,8 +111,23 @@ export class HomeComponent {
     map.setView(this.markers()[0].getLatLng(), this.MAX_ZOOM);
   }
 
+  markNextPointAsVisited(): void {
+    const nextPoint = this.destinationPoints()[0];
+    if (nextPoint) {
+      this.routeService.markPointAsVisited(nextPoint);
+    }
+  }
+
+  fetchNewRoutes(): void {
+    if (
+      confirm('Fetching new routes will remove all saved routes. Continue?')
+    ) {
+      this.routeService.fetchRoutes();
+    }
+  }
+
   private mapRoutePointsToMarkers(
-    points: LatLng[],
+    routePoints: RoutePoint[],
     currentPosition: LatLng | undefined
   ): Marker[] {
     const markers: Marker[] = [];
@@ -149,15 +143,19 @@ export class HomeComponent {
       markers.push(currentPosMarker);
     }
 
-    points.forEach((point, index) => {
-      const destinationMarker = marker(point, {
+    routePoints.forEach((routePoint) => {
+      const destinationMarker = marker(routePoint.point, {
         icon: icon({
           ...Icon.Default.prototype.options,
           iconUrl: 'assets/marker-icon.png',
           iconRetinaUrl: 'assets/marker-icon-2x.png',
           shadowUrl: 'assets/marker-shadow.png',
         }),
-      }).bindPopup(`Destination ${index + 1}`);
+      }).bindPopup(
+        `Address: ${routePoint.address || 'N/A'}<br/>Additional Info: ${
+          routePoint.additionalInfo || 'N/A'
+        }`
+      );
       markers.push(destinationMarker);
     });
 
@@ -165,8 +163,9 @@ export class HomeComponent {
   }
 
   private updateMarkersOnMap(map: Map, markers: Marker[]): void {
-    markers.forEach((m) => m.remove());
+    this.currentMarkersOnMap.forEach((m) => m.remove());
     markers.forEach((m) => m.addTo(map));
+    this.currentMarkersOnMap = markers;
   }
 
   private createRoute(map: Map): void {
@@ -194,68 +193,119 @@ export class HomeComponent {
     this.routeControl.route();
   }
 
+  private async initializeLocationTracking(): Promise<void> {
+    try {
+      const position = await Geolocation.getCurrentPosition();
+      this.currentPosition.set(
+        latLng(position.coords.latitude, position.coords.longitude)
+      );
+
+      this.watchId = await Geolocation.watchPosition(
+        {
+          maximumAge: 5000,
+        },
+        (position, err) => {
+          if (err) {
+            console.error('Error watching location:', err);
+            return;
+          }
+          if (position) {
+            this.currentPosition.set(
+              latLng(position.coords.latitude, position.coords.longitude)
+            );
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Error initializing location tracking:', error);
+    }
+  }
+
   private addCustomControls(map: Map): void {
-    const centerControl = (L.Control as any).extend({
-      options: {
-        position: 'topleft',
-      },
-      onAdd: () => {
-        const container = L.DomUtil.create(
-          'div',
-          'leaflet-bar leaflet-control'
-        );
-        const button = L.DomUtil.create('a', '', container);
-        button.innerHTML = '📍';
-        button.href = '#';
-        button.title = 'Center on my position';
-        button.style.fontSize = '20px';
-        button.style.width = '30px';
-        button.style.height = '30px';
-        button.style.lineHeight = '30px';
-        button.style.textAlign = 'center';
-        button.style.display = 'block';
-        button.style.textDecoration = 'none';
+    const centerControl = this.createCustomMapControl(
+      'topleft',
+      'Center on my position',
+      '📍',
+      () => this.center()
+    );
 
-        L.DomEvent.on(button, 'click', (e: Event) => {
-          L.DomEvent.preventDefault(e);
-          this.center();
-        });
+    const fitBoundsControl = this.createCustomMapControl(
+      'topleft',
+      'Show all route points',
+      '🗺️',
+      () => this.showAllRoutePoints()
+    );
 
-        return container;
-      },
-    });
+    const markVisitedControl = this.createCustomMapControl(
+      'topright',
+      'Mark next point as visited',
+      '✅',
+      () => this.markNextPointAsVisited()
+    );
 
-    const fitBoundsControl = (L.Control as any).extend({
-      options: {
-        position: 'topleft',
-      },
-      onAdd: () => {
-        const container = L.DomUtil.create(
-          'div',
-          'leaflet-bar leaflet-control'
-        );
-        const button = L.DomUtil.create('a', '', container);
-        button.innerHTML = '🗺️';
-        button.href = '#';
-        button.title = 'Show all route points';
-        button.style.fontSize = '20px';
-        button.style.width = '30px';
-        button.style.height = '30px';
-        button.style.lineHeight = '30px';
-        button.style.textAlign = 'center';
-        button.style.display = 'block';
-        button.style.textDecoration = 'none';
+    const nextRouteControl = this.createCustomMapControl(
+      'bottomright',
+      'Next route',
+      '⏭️',
+      () => this.routeService.showNextRoute()
+    );
 
-        L.DomEvent.on(button, 'click', (e: Event) => {
-          L.DomEvent.preventDefault(e);
-          this.showAllRoutePoints();
-        });
+    const previousRouteControl = this.createCustomMapControl(
+      'bottomright',
+      'Previous route',
+      '⏮️',
+      () => this.routeService.showPreviousRoute()
+    );
 
-        return container;
-      },
-    });
+    const fetchRoutesControl = this.createCustomMapControl(
+      'bottomleft',
+      'Fetch new routes',
+      '🔄',
+      () => this.fetchNewRoutes()
+    );
 
     new centerControl().addTo(map);
     new fitBoundsControl().addTo(map);
+    new markVisitedControl().addTo(map);
+    new nextRouteControl().addTo(map);
+    new previousRouteControl().addTo(map);
+    new fetchRoutesControl().addTo(map);
+  }
+
+  private createCustomMapControl(
+    position: string,
+    title: string,
+    innerHTML: string,
+    onClick: () => void
+  ) {
+    return L.Control.extend({
+      options: {
+        position: position,
+      },
+      onAdd: () => {
+        const container = L.DomUtil.create(
+          'div',
+          'leaflet-bar leaflet-control'
+        );
+        const button = L.DomUtil.create('a', '', container);
+        button.innerHTML = innerHTML;
+        button.href = '#';
+        button.title = title;
+        button.style.fontSize = '20px';
+        button.style.width = '30px';
+        button.style.height = '30px';
+        button.style.lineHeight = '30px';
+        button.style.textAlign = 'center';
+        button.style.display = 'block';
+        button.style.textDecoration = 'none';
+
+        L.DomEvent.on(button, 'click', (e: Event) => {
+          L.DomEvent.preventDefault(e);
+          onClick();
+        });
+
+        return container;
+      },
+    });
   }
 }
