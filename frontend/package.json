@@ -23,6 +23,7 @@
     "@capacitor/angular": "^2.0.3",
     "@capacitor/core": "latest",
     "@capacitor/geolocation": "^7.1.6",
+    "@capacitor/preferences": "^7.0.2",
     "leaflet": "^1.9.4",
     "leaflet-routing-machine": "^3.2.12",
     "rxjs": "~7.8.0",
