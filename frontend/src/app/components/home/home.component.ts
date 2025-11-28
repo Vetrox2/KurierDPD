@@ -14,7 +14,9 @@ import {
 import * as L from 'leaflet';
 import 'leaflet-routing-machine';
 import { Geolocation } from '@capacitor/geolocation';
-
+// TODO - zmiana ikonka mojej lokalizacji na jakis samochodzik, test czy lokalizacja przy ruchu sie aktualizuje
+// extract do serwisu, pobieranie trasy z backendu
+// dopasowanie mapy do ekranu
 @Component({
   selector: 'app-home',
   imports: [LeafletModule],
@@ -106,6 +108,7 @@ export class HomeComponent {
 
   onMapReady(map: Map): void {
     this.map.set(map);
+    this.addCustomControls(map);
   }
 
   showAllRoutePoints(): void {
@@ -168,5 +171,70 @@ export class HomeComponent {
 
     this.routeControl.setWaypoints(this.routePoints());
     this.routeControl.route();
+  }
+
+  private addCustomControls(map: Map): void {
+    const centerControl = (L.Control as any).extend({
+      options: {
+        position: 'topleft',
+      },
+      onAdd: () => {
+        const container = L.DomUtil.create(
+          'div',
+          'leaflet-bar leaflet-control'
+        );
+        const button = L.DomUtil.create('a', '', container);
+        button.innerHTML = '📍';
+        button.href = '#';
+        button.title = 'Center on my position';
+        button.style.fontSize = '20px';
+        button.style.width = '30px';
+        button.style.height = '30px';
+        button.style.lineHeight = '30px';
+        button.style.textAlign = 'center';
+        button.style.display = 'block';
+        button.style.textDecoration = 'none';
+
+        L.DomEvent.on(button, 'click', (e: Event) => {
+          L.DomEvent.preventDefault(e);
+          this.center();
+        });
+
+        return container;
+      },
+    });
+
+    const fitBoundsControl = (L.Control as any).extend({
+      options: {
+        position: 'topleft',
+      },
+      onAdd: () => {
+        const container = L.DomUtil.create(
+          'div',
+          'leaflet-bar leaflet-control'
+        );
+        const button = L.DomUtil.create('a', '', container);
+        button.innerHTML = '🗺️';
+        button.href = '#';
+        button.title = 'Show all route points';
+        button.style.fontSize = '20px';
+        button.style.width = '30px';
+        button.style.height = '30px';
+        button.style.lineHeight = '30px';
+        button.style.textAlign = 'center';
+        button.style.display = 'block';
+        button.style.textDecoration = 'none';
+
+        L.DomEvent.on(button, 'click', (e: Event) => {
+          L.DomEvent.preventDefault(e);
+          this.showAllRoutePoints();
+        });
+
+        return container;
+      },
+    });
+
+    new centerControl().addTo(map);
+    new fitBoundsControl().addTo(map);
   }
 }

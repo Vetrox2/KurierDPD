@@ -1,9 +1,6 @@
 <div
   leaflet
-  style="height: 95vh"
+  style="height: 100vh"
   [leafletOptions]="MAP_OPTIONS"
   (leafletMapReady)="onMapReady($event)"
 ></div>
-
-<button (click)="center()">Center Map</button>
-<button (click)="showAllRoutePoints()">Show All Route</button>
