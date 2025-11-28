@@ -1,0 +1,12 @@
+:host ::ng-deep {
+  .leaflet-routing-container {
+    max-width: 80vw !important;
+    max-height: 40vh !important;
+    overflow-y: auto !important;
+  }
+
+  .leaflet-routing-collapse-btn {
+    left: 2px;
+    top: 0px;
+  }
+}

@@ -52,6 +52,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       : this.destinationPoints().map((dp) => dp.point);
   });
 
+  private followMode = signal(false);
   private currentPosition = signal<LatLng | undefined>(undefined);
   private map = signal<Map | undefined>(undefined);
   private markers = computed<Marker[]>(() =>
@@ -73,6 +74,10 @@ export class HomeComponent implements OnInit, OnDestroy {
 
       this.updateMarkersOnMap(map, this.markers());
       this.updateRoute(map);
+
+      if (this.followMode()) {
+        this.center();
+      }
     });
   }
 
@@ -90,9 +95,14 @@ export class HomeComponent implements OnInit, OnDestroy {
   onMapReady(map: Map): void {
     this.map.set(map);
     this.addCustomControls(map);
+
+    map.on('dragstart', () => {
+      this.followMode.set(false);
+    });
   }
 
   showAllRoutePoints(): void {
+    this.followMode.set(false);
     const map = this.map();
     if (!map) {
       return;
@@ -103,6 +113,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   center(): void {
+    this.followMode.set(true);
     const map = this.map();
     if (!map || this.markers().length === 0) {
       return;
@@ -180,6 +191,8 @@ export class HomeComponent implements OnInit, OnDestroy {
       createMarker: () => {
         return null as any;
       },
+      collapsible: true,
+      show: false,
     }).addTo(map);
   }
 
