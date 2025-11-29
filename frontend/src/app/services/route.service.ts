@@ -24,8 +24,6 @@ export class RouteService {
   );
 
   constructor() {
-    this.loadRoutesFromStorage();
-
     effect(() => {
       const routes = this._savedRoutes();
       if (routes.length > 0) {
@@ -35,67 +33,27 @@ export class RouteService {
   }
 
   fetchRoutes(): void {
-    // this.http.get<RouteDto[]>('api/route').subscribe((routes) => {
-    // this._fetchedRouteDtos.set(routes);
-    // this._savedRoutes.set(
-    //   routes.map((dto) => ({
-    //     id: dto.id,
-    //     points: dto.points.map((point) => ({
-    //       point: latLng(point.lat, point.lng),
-    //       address: point.address,
-    //       additionalInfo: point.additionalInfo,
-    //       markedAsVisited: false,
-    //     })),
-    //   }))
-    // );
-    // this._currentRouteIndex.set(0);
-    // });
-    const routes: RouteDto[] = [
-      {
-        id: 1,
-        points: [
-          {
-            lat: 52.2297,
-            lng: 21.0122,
-            additionalInfo: 'Paczka na 2 pietro',
-            address: 'Warsaw, Poland',
-          },
-          { lat: 52.4064, lng: 16.9252 },
-          { lat: 51.1079, lng: 17.0385 },
-          { lat: 50.0647, lng: 19.945 },
-        ],
-      },
-      {
-        id: 2,
-        points: [
-          {
-            lat: 49.2297,
-            lng: 18.0122,
-            additionalInfo: 'Paczka na 2 pietro',
-            address: 'Bielsko, Poland',
-          },
-          { lat: 65.4064, lng: 4.9252 },
-          { lat: 51.1079, lng: 17.0385 },
-          { lat: 50.0647, lng: 19.945 },
-        ],
-      },
-    ];
-    this._fetchedRouteDtos.set(routes);
-    this._savedRoutes.set(
-      routes.map((dto) => ({
-        id: dto.id,
-        points: dto.points.map((point) => ({
-          point: latLng(point.lat, point.lng),
-          address: point.address,
-          additionalInfo: point.additionalInfo,
-          markedAsVisited: false,
-        })),
-      }))
-    );
-    this._currentRouteIndex.set(0);
+    this.http
+      .get<RouteDto[]>('http://127.0.0.1:8000/routes')
+      .subscribe((routes) => {
+        this._fetchedRouteDtos.set(routes);
+        this._savedRoutes.set(
+          routes.map((dto) => ({
+            id: dto.id,
+            points: dto.points.map((point) => ({
+              point: latLng(point.lat, point.lng),
+              address: point.address,
+              additionalInfo: point.additionalInfo,
+              markedAsVisited: false,
+            })),
+          }))
+        );
+        this._currentRouteIndex.set(0);
+      });
   }
 
-  fetchRoutesIfEmpty(): void {
+  async initRoutes(): Promise<void> {
+    await this.loadRoutesFromStorage();
     if (this._savedRoutes().length === 0) {
       this.fetchRoutes();
     }
@@ -128,8 +86,19 @@ export class RouteService {
       }
 
       currentRoute.points[pointIndex].markedAsVisited = true;
+
+      if (currentRoute.points.every((p) => p.markedAsVisited)) {
+        this.removeRouteApiRequest(currentRoute.id);
+        routes.splice(this._currentRouteIndex(), 1);
+        this._currentRouteIndex.set(0);
+      }
+
       return [...routes];
     });
+  }
+
+  private async removeRouteApiRequest(routeId: number): Promise<void> {
+    this.http.delete(`http://127.0.0.1:8000/routes/${routeId}`).subscribe();
   }
 
   private async loadRoutesFromStorage(): Promise<void> {

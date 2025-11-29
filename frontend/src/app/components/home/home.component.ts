@@ -82,7 +82,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.routeService.fetchRoutesIfEmpty();
+    this.routeService.initRoutes();
     this.initializeLocationTracking();
   }
 
