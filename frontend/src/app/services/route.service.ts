@@ -9,6 +9,7 @@ import { Preferences } from '@capacitor/preferences';
 })
 export class RouteService {
   private readonly STORAGE_KEY = 'saved_routes';
+  private readonly API_URL = 'https://kurierdpd-production.up.railway.app';
 
   private http = inject(HttpClient);
 
@@ -33,23 +34,21 @@ export class RouteService {
   }
 
   fetchRoutes(): void {
-    this.http
-      .get<RouteDto[]>('http://127.0.0.1:8000/routes')
-      .subscribe((routes) => {
-        this._fetchedRouteDtos.set(routes);
-        this._savedRoutes.set(
-          routes.map((dto) => ({
-            id: dto.id,
-            points: dto.points.map((point) => ({
-              point: latLng(point.lat, point.lng),
-              address: point.address,
-              additionalInfo: point.additionalInfo,
-              markedAsVisited: false,
-            })),
-          }))
-        );
-        this._currentRouteIndex.set(0);
-      });
+    this.http.get<RouteDto[]>(`${this.API_URL}/routes`).subscribe((routes) => {
+      this._fetchedRouteDtos.set(routes);
+      this._savedRoutes.set(
+        routes.map((dto) => ({
+          id: dto.id,
+          points: dto.points.map((point) => ({
+            point: latLng(point.lat, point.lng),
+            address: point.address,
+            additionalInfo: point.additionalInfo,
+            markedAsVisited: false,
+          })),
+        }))
+      );
+      this._currentRouteIndex.set(0);
+    });
   }
 
   async initRoutes(): Promise<void> {
@@ -98,7 +97,7 @@ export class RouteService {
   }
 
   private async removeRouteApiRequest(routeId: number): Promise<void> {
-    this.http.delete(`http://127.0.0.1:8000/routes/${routeId}`).subscribe();
+    this.http.delete(`${this.API_URL}/routes/${routeId}`).subscribe();
   }
 
   private async loadRoutesFromStorage(): Promise<void> {
