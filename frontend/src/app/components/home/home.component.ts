@@ -7,7 +7,8 @@ import {
   OnInit,
   signal,
 } from '@angular/core';
-import { LeafletModule } from '@bluehalo/ngx-leaflet';
+import * as L from 'leaflet';
+import 'leaflet-routing-machine';
 import {
   Icon,
   icon,
@@ -19,8 +20,7 @@ import {
   Marker,
   tileLayer,
 } from 'leaflet';
-import * as L from 'leaflet';
-import 'leaflet-routing-machine';
+import { LeafletModule } from '@bluehalo/ngx-leaflet';
 import { Geolocation } from '@capacitor/geolocation';
 import { RouteService } from '../../services/route.service';
 import { RoutePoint } from '../../models/route.model';
@@ -61,9 +61,14 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.currentPosition()
     )
   );
+
+  private createRouteControl?: (...param: any[]) => L.Routing.Control;
   private routeControl?: L.Routing.Control;
   private watchId?: string;
   private currentMarkersOnMap: Marker[] = [];
+
+  private loadRoutingRetryCount = 0;
+  private loadRoutingMaxRetries = 10;
 
   constructor() {
     effect(() => {
@@ -82,6 +87,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.loadRoutingControlMethod();
     this.routeService.initRoutes();
     this.initializeLocationTracking();
   }
@@ -180,7 +186,18 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   private createRoute(map: Map): void {
-    this.routeControl = (L as any).Routing.control({
+    if (
+      !this.createRouteControl &&
+      this.loadRoutingRetryCount <= this.loadRoutingMaxRetries
+    ) {
+      setTimeout(() => this.createRoute(map), 500);
+      return;
+    }
+    if (!this.createRouteControl) {
+      return;
+    }
+
+    this.routeControl = this.createRouteControl({
       waypoints: this.routePoints(),
       routeWhileDragging: false,
       showAlternatives: false,
@@ -208,13 +225,19 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   private async initializeLocationTracking(): Promise<void> {
     try {
-      const position = await Geolocation.getCurrentPosition();
+      const position = await Geolocation.getCurrentPosition({
+        enableHighAccuracy: true,
+        timeout: 20000,
+        maximumAge: 5000,
+      });
       this.currentPosition.set(
         latLng(position.coords.latitude, position.coords.longitude)
       );
 
       this.watchId = await Geolocation.watchPosition(
         {
+          enableHighAccuracy: true,
+          timeout: 20000,
           maximumAge: 5000,
         },
         (position, err) => {
@@ -232,6 +255,32 @@ export class HomeComponent implements OnInit, OnDestroy {
     } catch (error) {
       console.error('Error initializing location tracking:', error);
     }
+  }
+
+  private loadRoutingControlMethod(): void {
+    const createControl: (...param: any[]) => L.Routing.Control = (
+      window as any
+    ).L?.Routing?.control;
+
+    if (!createControl) {
+      if (this.loadRoutingRetryCount < this.loadRoutingMaxRetries) {
+        this.loadRoutingRetryCount++;
+        console.warn(
+          `Leaflet Routing Machine is not loaded, retry ${this.loadRoutingRetryCount}/${this.loadRoutingMaxRetries}...`
+        );
+        setTimeout(() => this.loadRoutingControlMethod(), 500);
+        return;
+      } else {
+        this.loadRoutingRetryCount++;
+        console.error(
+          'Leaflet Routing Machine failed to load after maximum retries.'
+        );
+        return;
+      }
+    }
+
+    this.createRouteControl = createControl;
+    this.loadRoutingRetryCount = 0;
   }
 
   private addCustomControls(map: Map): void {
