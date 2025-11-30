@@ -1,8 +1,9 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import { latLng } from 'leaflet';
 import { Route, RouteDto, RoutePoint } from '../models/route.model';
 import { Preferences } from '@capacitor/preferences';
+import { AuthService } from './auth.service';
 
 @Injectable({
   providedIn: 'root',
@@ -12,6 +13,7 @@ export class RouteService {
   private readonly API_URL = 'https://kurierdpd-production.up.railway.app';
 
   private http = inject(HttpClient);
+  private authService = inject(AuthService);
 
   private _fetchedRouteDtos = signal<RouteDto[]>([]);
   private _savedRoutes = signal<Route[]>([]);
@@ -34,21 +36,32 @@ export class RouteService {
   }
 
   fetchRoutes(): void {
-    this.http.get<RouteDto[]>(`${this.API_URL}/routes`).subscribe((routes) => {
-      this._fetchedRouteDtos.set(routes);
-      this._savedRoutes.set(
-        routes.map((dto) => ({
-          id: dto.id,
-          points: dto.points.map((point) => ({
-            point: latLng(point.lat, point.lng),
-            address: point.address,
-            additionalInfo: point.additionalInfo,
-            markedAsVisited: false,
-          })),
-        }))
-      );
-      this._currentRouteIndex.set(0);
+    const token = this.authService.authToken();
+    if (!token) {
+      throw new Error('No auth token available');
+    }
+
+    const headers = new HttpHeaders({
+      Authorization: `Bearer ${token}`,
     });
+
+    this.http
+      .get<RouteDto[]>(`${this.API_URL}/routes`, { headers })
+      .subscribe((routes) => {
+        this._fetchedRouteDtos.set(routes);
+        this._savedRoutes.set(
+          routes.map((dto) => ({
+            id: dto.id,
+            points: dto.points.map((point) => ({
+              point: latLng(point.lat, point.lng),
+              address: point.address,
+              additionalInfo: point.additionalInfo,
+              markedAsVisited: false,
+            })),
+          }))
+        );
+        this._currentRouteIndex.set(0);
+      });
   }
 
   async initRoutes(): Promise<void> {

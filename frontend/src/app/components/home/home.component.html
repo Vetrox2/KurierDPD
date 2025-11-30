@@ -4,3 +4,7 @@
   [leafletOptions]="MAP_OPTIONS"
   (leafletMapReady)="onMapReady($event)"
 ></div>
+
+@if (showLoginDialog()) {
+<app-login (close)="closeLoginDialog()"></app-login>
+}

@@ -24,10 +24,12 @@ import { LeafletModule } from '@bluehalo/ngx-leaflet';
 import { Geolocation } from '@capacitor/geolocation';
 import { RouteService } from '../../services/route.service';
 import { RoutePoint } from '../../models/route.model';
+import { AuthService } from '../../services/auth.service';
+import { LoginComponent } from '../login/login.component';
 
 @Component({
   selector: 'app-home',
-  imports: [LeafletModule],
+  imports: [LeafletModule, LoginComponent],
   templateUrl: './home.component.html',
   styleUrl: './home.component.scss',
 })
@@ -43,6 +45,9 @@ export class HomeComponent implements OnInit, OnDestroy {
   };
 
   private routeService = inject(RouteService);
+  private authService = inject(AuthService);
+
+  showLoginDialog = signal(false);
 
   destinationPoints = this.routeService.destinationPoints;
   routePoints = computed<LatLng[]>(() => {
@@ -82,6 +87,13 @@ export class HomeComponent implements OnInit, OnDestroy {
 
       if (this.followMode()) {
         this.center();
+      }
+    });
+
+    effect(() => {
+      if (this.authService.authToken() && this.showLoginDialog()) {
+        this.showLoginDialog.set(false);
+        this.fetchNewRoutes();
       }
     });
   }
@@ -136,11 +148,26 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   fetchNewRoutes(): void {
+    const token = this.authService.authToken();
+
+    if (!token) {
+      this.showLoginDialog.set(true);
+      return;
+    }
+
     if (
       confirm('Fetching new routes will remove all saved routes. Continue?')
     ) {
-      this.routeService.fetchRoutes();
+      try {
+        this.routeService.fetchRoutes();
+      } catch (error) {
+        console.error('Failed to fetch routes:', error);
+      }
     }
+  }
+
+  closeLoginDialog(): void {
+    this.showLoginDialog.set(false);
   }
 
   private mapRoutePointsToMarkers(
